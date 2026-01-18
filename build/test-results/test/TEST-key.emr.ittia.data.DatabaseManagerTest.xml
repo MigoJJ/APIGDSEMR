@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="key.emr.ittia.data.DatabaseManagerTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-01-18T01:26:50.257Z" hostname="ittia-VMware-Virtual-Platform" time="0.23">
+  <properties/>
+  <testcase name="updatePrompt()" classname="key.emr.ittia.data.DatabaseManagerTest" time="0.196"/>
+  <testcase name="deletePrompt()" classname="key.emr.ittia.data.DatabaseManagerTest" time="0.019"/>
+  <testcase name="addAndLoadPrompt()" classname="key.emr.ittia.data.DatabaseManagerTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

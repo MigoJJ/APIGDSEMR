@@ -1,4 +1,6 @@
-package key.emr.ittia;
+package key.emr.ittia.data;
+
+import key.emr.ittia.model.Prompt;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -24,11 +26,11 @@ public class DatabaseManager {
     }
 
     public void createTable() {
-        String sql = "CREATE TABLE IF NOT EXISTS prompts (\n"
-                + " id integer PRIMARY KEY,\n"
-                + " prompt text NOT NULL,\n"
-                + " category text\n"
-                + ");";
+        String sql = "CREATE TABLE IF NOT EXISTS prompts (\n" +
+                " id integer PRIMARY KEY,\n" +
+                " prompt text NOT NULL,\n" +
+                " category text\n" +
+                ");";
 
         try (Connection conn = this.connect();
              Statement stmt = conn.createStatement()) {
@@ -38,16 +40,16 @@ public class DatabaseManager {
         }
     }
 
-    public List<GeminiApp.Prompt> loadPrompts() {
+    public List<Prompt> loadPrompts() {
         String sql = "SELECT id, prompt, category FROM prompts";
-        List<GeminiApp.Prompt> prompts = new ArrayList<>();
+        List<Prompt> prompts = new ArrayList<>();
 
         try (Connection conn = this.connect();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
 
             while (rs.next()) {
-                prompts.add(new GeminiApp.Prompt(
+                prompts.add(new Prompt(
                         rs.getInt("id"),
                         rs.getString("prompt"),
                         rs.getString("category")));
@@ -58,7 +60,7 @@ public class DatabaseManager {
         return prompts;
     }
 
-    public void addPrompt(GeminiApp.Prompt prompt) {
+    public void addPrompt(Prompt prompt) {
         String sql = "INSERT INTO prompts(prompt, category) VALUES(?,?)";
 
         try (Connection conn = this.connect();
@@ -76,7 +78,7 @@ public class DatabaseManager {
         }
     }
 
-    public void deletePrompt(GeminiApp.Prompt prompt) {
+    public void deletePrompt(Prompt prompt) {
         String sql = "DELETE FROM prompts WHERE id = ?";
 
         try (Connection conn = this.connect();
@@ -88,10 +90,10 @@ public class DatabaseManager {
         }
     }
 
-    public void updatePrompt(GeminiApp.Prompt prompt) {
-        String sql = "UPDATE prompts SET prompt = ? , "
-                + "category = ? "
-                + "WHERE id = ?";
+    public void updatePrompt(Prompt prompt) {
+        String sql = "UPDATE prompts SET prompt = ? , " +
+                "category = ? " +
+                "WHERE id = ?";
 
         try (Connection conn = this.connect();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
@@ -104,4 +106,3 @@ public class DatabaseManager {
         }
     }
 }
-

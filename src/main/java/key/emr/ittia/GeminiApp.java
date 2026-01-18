@@ -1,12 +1,11 @@
 package key.emr.ittia;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
+import key.emr.ittia.data.DatabaseManager;
+import key.emr.ittia.model.Model;
+import key.emr.ittia.model.Prompt;
+import key.emr.ittia.service.GeminiService;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -18,7 +17,6 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.scene.control.TextInputDialog;
-import key.emr.ittia.PromptEditDialog;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
@@ -29,29 +27,17 @@ import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 import javafx.stage.Stage;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class GeminiApp extends Application {
 
-    private static final String API_KEY = "AIzaSyDS2Ci7MqGffHQ4acidrXEL4IKOrFmMw1A";
     private String modelName = "gemini-2.5-flash"; // Default model
 
-    private final Gson gson = new Gson();
     private final DatabaseManager dbManager = new DatabaseManager();
+    private final GeminiService geminiService = new GeminiService();
 
     public static void main(String[] args) {
         launch(args);
@@ -162,7 +148,7 @@ public class GeminiApp extends Application {
         Task<List<Model>> listModelsTask = new Task<>() {
             @Override
             protected List<Model> call() throws Exception {
-                return listModels();
+                return geminiService.listModels();
             }
         };
 
@@ -273,14 +259,14 @@ public class GeminiApp extends Application {
             Task<String> apiCallTask = new Task<>() {
                 @Override
                 protected String call() throws Exception {
-                    List<Path> imagePaths = parseImagePaths(imagePathField.getText());
-                    return callGeminiApi(prompt, imagePaths);
+                    List<Path> imagePaths = geminiService.parseImagePaths(imagePathField.getText());
+                    return geminiService.callGeminiApi(modelName, prompt, imagePaths);
                 }
             };
 
             apiCallTask.setOnSucceeded(e -> {
                 progressIndicator.setVisible(false);
-                responseArea.setText(parseResponse(apiCallTask.getValue()));
+                responseArea.setText(geminiService.parseResponse(apiCallTask.getValue()));
             });
 
             apiCallTask.setOnFailed(e -> {
@@ -319,249 +305,5 @@ public class GeminiApp extends Application {
         Label label = new Label(text);
         label.getStyleClass().add("section-title");
         return label;
-    }
-    
-    private List<Model> listModels() throws Exception {
-        String url = "https://generativelanguage.googleapis.com/v1beta/models?key=" + API_KEY;
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("Failed to list models: " + response.body());
-        }
-
-        return parseModelsResponse(response.body());
-    }
-
-    private List<Model> parseModelsResponse(String jsonResponse) {
-        List<Model> models = new ArrayList<>();
-        JsonObject root = gson.fromJson(jsonResponse, JsonObject.class);
-        JsonArray modelsArray = root.getAsJsonArray("models");
-        for (JsonElement modelElement : modelsArray) {
-            JsonObject modelObject = modelElement.getAsJsonObject();
-            String name = modelObject.get("name").getAsString().replace("models/", "");
-            String description = "";
-            if (modelObject.has("description")) {
-                JsonElement descriptionElement = modelObject.get("description");
-                if (descriptionElement != null && !descriptionElement.isJsonNull()) {
-                    description = descriptionElement.getAsString();
-                }
-            }
-            String category = "Other";
-            if (name.contains("flash")) {
-                category = "Flash";
-            } else if (name.contains("pro")) {
-                category = "Pro";
-            }
-            models.add(new Model(name, description, category));
-        }
-        return models;
-    }
-
-
-    private String callGeminiApi(String text) throws Exception {
-        return callGeminiApi(text, List.of());
-    }
-
-    private String callGeminiApi(String text, List<Path> imagePaths) throws Exception {
-        String url = "https://generativelanguage.googleapis.com/v1beta/models/"
-            + modelName + ":generateContent?key=" + API_KEY;
-        String jsonBody = createJsonBody(text, imagePaths);
-
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
-
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-        if (response.statusCode() != 200) {
-            throw new RuntimeException("Request failed! Status code: " + response.statusCode() + " " + response.body());
-        }
-
-        return response.body();
-    }
-
-    private String createJsonBody(String text, List<Path> imagePaths) throws Exception {
-        JsonArray parts = new JsonArray();
-        for (Path imagePath : imagePaths) {
-            JsonObject inlineData = new JsonObject();
-            inlineData.addProperty("mime_type", detectMimeType(imagePath));
-            inlineData.addProperty("data", encodeBase64(imagePath));
-
-            JsonObject imagePart = new JsonObject();
-            imagePart.add("inline_data", inlineData);
-            parts.add(imagePart);
-        }
-
-        JsonObject textPart = new JsonObject();
-        textPart.addProperty("text", text);
-        parts.add(textPart);
-
-        JsonObject content = new JsonObject();
-        content.add("parts", parts);
-
-        JsonArray contents = new JsonArray();
-        contents.add(content);
-
-        JsonObject root = new JsonObject();
-        root.add("contents", contents);
-
-        return gson.toJson(root);
-    }
-
-    private List<Path> parseImagePaths(String rawPaths) throws Exception {
-        if (rawPaths == null || rawPaths.trim().isEmpty()) {
-            return List.of();
-        }
-        List<Path> results = new ArrayList<>();
-        String[] entries = rawPaths.split("[;\\n]+");
-        for (String entry : entries) {
-            String trimmed = entry.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            Path path = Paths.get(trimmed);
-            if (!Files.exists(path)) {
-                throw new IllegalArgumentException("Image path not found: " + trimmed);
-            }
-            if (Files.isDirectory(path)) {
-                try (Stream<Path> stream = Files.list(path)) {
-                    List<Path> images = stream
-                            .filter(Files::isRegularFile)
-                            .filter(this::isImageFile)
-                            .sorted()
-                            .collect(Collectors.toList());
-                    results.addAll(images);
-                }
-            } else if (isImageFile(path)) {
-                results.add(path);
-            } else {
-                throw new IllegalArgumentException("Unsupported image type: " + trimmed);
-            }
-        }
-        return results;
-    }
-
-    private boolean isImageFile(Path path) {
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return name.endsWith(".png")
-                || name.endsWith(".jpg")
-                || name.endsWith(".jpeg")
-                || name.endsWith(".gif")
-                || name.endsWith(".webp")
-                || name.endsWith(".bmp");
-    }
-
-    private String detectMimeType(Path path) throws Exception {
-        String contentType = Files.probeContentType(path);
-        if (contentType != null && contentType.startsWith("image/")) {
-            return contentType;
-        }
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (name.endsWith(".png")) {
-            return "image/png";
-        }
-        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) {
-            return "image/jpeg";
-        }
-        if (name.endsWith(".gif")) {
-            return "image/gif";
-        }
-        if (name.endsWith(".webp")) {
-            return "image/webp";
-        }
-        if (name.endsWith(".bmp")) {
-            return "image/bmp";
-        }
-        return "application/octet-stream";
-    }
-
-    private String encodeBase64(Path path) throws Exception {
-        return Base64.getEncoder().encodeToString(Files.readAllBytes(path));
-    }
-
-    private String parseResponse(String jsonResponse) {
-        try {
-            JsonObject root = gson.fromJson(jsonResponse, JsonObject.class);
-            return root.getAsJsonArray("candidates")
-                    .get(0).getAsJsonObject()
-                    .getAsJsonObject("content")
-                    .getAsJsonArray("parts")
-                    .get(0).getAsJsonObject()
-                    .get("text").getAsString();
-        } catch (Exception e) {
-            return "Error parsing response: " + e.getMessage() + "\nRaw response:\n" + jsonResponse;
-        }
-    }
-    
-    public static class Model {
-        private final String name;
-        private final String description;
-        private final String category;
-
-        public Model(String name, String description, String category) {
-            this.name = name;
-            this.description = description;
-            this.category = category;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getDescription() {
-            return description;
-        }
-
-        public String getCategory() {
-            return category;
-        }
-    }
-
-    public static class Prompt {
-        private int id;
-        private String promptText;
-        private String category;
-
-        public Prompt(int id, String promptText, String category) {
-            this.id = id;
-            this.promptText = promptText;
-            this.category = category;
-        }
-
-        public int getId() {
-            return id;
-        }
-
-        public String getPromptText() {
-            return promptText;
-        }
-
-        public void setPromptText(String promptText) {
-            this.promptText = promptText;
-        }
-
-        public String getCategory() {
-            return category;
-        }
-
-        public void setCategory(String category) {
-            this.category = category;
-        }
-
-        public void setId(int id) {
-            this.id = id;
-        }
     }
 }
