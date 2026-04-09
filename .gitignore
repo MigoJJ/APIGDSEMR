@@ -1,5 +1,29 @@
-build/
+# Gradle
 .gradle/
 .gradle-home/
 .gradle-tmp/
+build/
+
+# Java / JVM
 out/
+*.class
+hs_err_pid*
+replay_pid*
+
+# IDEs
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local runtime data
+prompts.db
+
+# Logs
+*.log

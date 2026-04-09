@@ -36,9 +36,12 @@ run {
 
 tasks.register('healthCheck', JavaExec) {
     group = 'verification'
-    description = 'Checks Gemini and OpenAI API connectivity using GEMINI_API_KEY and OPENAI_API_KEY.'
+    description = 'Checks Gemini or OpenAI API connectivity. Set -Pprovider=gemini|openai|all.'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'key.emr.ittia.GeminiHealthCheck'
+    if (project.hasProperty('provider')) {
+        args project.property('provider').toString()
+    }
 }
 
 java {
