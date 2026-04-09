@@ -15,14 +15,8 @@ public class DatabaseManager {
 
     private static final String URL = "jdbc:sqlite:prompts.db";
 
-    private Connection connect() {
-        Connection conn = null;
-        try {
-            conn = DriverManager.getConnection(URL);
-        } catch (SQLException e) {
-            System.out.println(e.getMessage());
-        }
-        return conn;
+    private Connection connect() throws SQLException {
+        return DriverManager.getConnection(URL);
     }
 
     public void createTable() {
@@ -36,7 +30,7 @@ public class DatabaseManager {
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            System.err.println("Error creating table: " + e.getMessage());
         }
     }
 

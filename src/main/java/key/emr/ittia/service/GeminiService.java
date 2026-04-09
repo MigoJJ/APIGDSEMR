@@ -10,29 +10,36 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
-import java.util.Locale;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-public class GeminiService {
+public class GeminiService implements AiService {
 
     private static final String API_KEY_ENV = "GEMINI_API_KEY";
+    private static final String PROVIDER_NAME = "Gemini";
     private final Gson gson = new Gson();
     private final HttpClient client;
+    private final ImagePathService imagePathService;
 
     public GeminiService() {
+        this(new ImagePathService());
+    }
+
+    public GeminiService(ImagePathService imagePathService) {
+        this.imagePathService = imagePathService;
         this.client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
     }
 
+    @Override
+    public String getProviderName() {
+        return PROVIDER_NAME;
+    }
+
+    @Override
     public List<Model> listModels() throws Exception {
         String apiKey = requireApiKey();
         String url = "https://generativelanguage.googleapis.com/v1beta/models?key=" + apiKey;
@@ -45,13 +52,26 @@ public class GeminiService {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
-            throw new RuntimeException("Failed to list models: " + response.body());
+            String errorMsg = extractErrorMessage(response.body());
+            throw new RuntimeException("Gemini API Error (" + response.statusCode() + "): " + errorMsg);
         }
 
         return parseModelsResponse(response.body());
     }
 
-    public String callGeminiApi(String modelName, String text, List<Path> imagePaths) throws Exception {
+    private String extractErrorMessage(String jsonResponse) {
+        try {
+            JsonObject root = gson.fromJson(jsonResponse, JsonObject.class);
+            if (root.has("error")) {
+                JsonObject error = root.getAsJsonObject("error");
+                return error.get("message").getAsString();
+            }
+        } catch (Exception ignored) { }
+        return "Unknown error: " + jsonResponse;
+    }
+
+    @Override
+    public String generateResponse(String modelName, String text, List<Path> imagePaths) throws Exception {
         String apiKey = requireApiKey();
         String url = "https://generativelanguage.googleapis.com/v1beta/models/"
             + modelName + ":generateContent?key=" + apiKey;
@@ -65,7 +85,12 @@ public class GeminiService {
 
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        return response.body();
+        if (response.statusCode() != 200) {
+            String errorMsg = extractErrorMessage(response.body());
+            throw new RuntimeException("Gemini API Error (" + response.statusCode() + "): " + errorMsg);
+        }
+
+        return parseResponse(response.body());
     }
 
     private String requireApiKey() {
@@ -82,8 +107,8 @@ public class GeminiService {
         JsonArray parts = new JsonArray();
         for (Path imagePath : imagePaths) {
             JsonObject inlineData = new JsonObject();
-            inlineData.addProperty("mime_type", detectMimeType(imagePath));
-            inlineData.addProperty("data", encodeBase64(imagePath));
+            inlineData.addProperty("mime_type", imagePathService.detectMimeType(imagePath));
+            inlineData.addProperty("data", imagePathService.encodeBase64(imagePath));
 
             JsonObject imagePart = new JsonObject();
             imagePart.add("inline_data", inlineData);
@@ -106,80 +131,14 @@ public class GeminiService {
         return gson.toJson(root);
     }
 
-    public List<Path> parseImagePaths(String rawPaths) throws Exception {
-        if (rawPaths == null || rawPaths.trim().isEmpty()) {
-            return List.of();
-        }
-        List<Path> results = new ArrayList<>();
-        String[] entries = rawPaths.split("[;\\n]+");
-        for (String entry : entries) {
-            String trimmed = entry.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            Path path = Paths.get(trimmed);
-            if (!Files.exists(path)) {
-                throw new IllegalArgumentException("Image path not found: " + trimmed);
-            }
-            if (Files.isDirectory(path)) {
-                try (Stream<Path> stream = Files.list(path)) {
-                    List<Path> images = stream
-                            .filter(Files::isRegularFile)
-                            .filter(this::isImageFile)
-                            .sorted()
-                            .collect(Collectors.toList());
-                    results.addAll(images);
-                }
-            } else if (isImageFile(path)) {
-                results.add(path);
-            } else {
-                throw new IllegalArgumentException("Unsupported image type: " + trimmed);
-            }
-        }
-        return results;
-    }
-
-    private boolean isImageFile(Path path) {
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        return name.endsWith(".png")
-                || name.endsWith(".jpg")
-                || name.endsWith(".jpeg")
-                || name.endsWith(".gif")
-                || name.endsWith(".webp")
-                || name.endsWith(".bmp");
-    }
-
-    private String detectMimeType(Path path) throws Exception {
-        String contentType = Files.probeContentType(path);
-        if (contentType != null && contentType.startsWith("image/")) {
-            return contentType;
-        }
-        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (name.endsWith(".png")) {
-            return "image/png";
-        }
-        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) {
-            return "image/jpeg";
-        }
-        if (name.endsWith(".gif")) {
-            return "image/gif";
-        }
-        if (name.endsWith(".webp")) {
-            return "image/webp";
-        }
-        if (name.endsWith(".bmp")) {
-            return "image/bmp";
-        }
-        return "application/octet-stream";
-    }
-
-    private String encodeBase64(Path path) throws Exception {
-        return Base64.getEncoder().encodeToString(Files.readAllBytes(path));
-    }
-
     public String parseResponse(String jsonResponse) {
         try {
             JsonObject root = gson.fromJson(jsonResponse, JsonObject.class);
+            
+            if (root.has("error")) {
+                return "API Error: " + extractErrorMessage(jsonResponse);
+            }
+
             if (root.has("candidates")) {
                 JsonArray candidates = root.getAsJsonArray("candidates");
                 if (candidates.size() > 0) {
@@ -221,7 +180,7 @@ public class GeminiService {
                 description = "텍스트를 벡터로 변환하는 임베딩 모델입니다.";
             }
 
-            models.add(new Model(name, description, category));
+            models.add(new Model(name, description, category, PROVIDER_NAME));
         }
         return models;
     }

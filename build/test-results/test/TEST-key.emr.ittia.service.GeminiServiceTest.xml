@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="key.emr.ittia.service.GeminiServiceTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-01-18T01:26:50.810Z" hostname="ittia-VMware-Virtual-Platform" time="0.053">
+<testsuite name="key.emr.ittia.service.GeminiServiceTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-04-09T03:10:46.018Z" hostname="ittia-VMware-Virtual-Platform" time="0.045">
   <properties/>
-  <testcase name="parseImagePaths_NonExistentFile_ThrowsException()" classname="key.emr.ittia.service.GeminiServiceTest" time="0.003"/>
-  <testcase name="parseImagePaths_Directory_ReturnsImagesInDirectory(Path)" classname="key.emr.ittia.service.GeminiServiceTest" time="0.015"/>
+  <testcase name="parseImagePaths_NonExistentFile_ThrowsException()" classname="key.emr.ittia.service.GeminiServiceTest" time="0.002"/>
+  <testcase name="parseImagePaths_Directory_ReturnsImagesInDirectory(Path)" classname="key.emr.ittia.service.GeminiServiceTest" time="0.016"/>
   <testcase name="parseImagePaths_ValidPaths_ReturnsPaths(Path)" classname="key.emr.ittia.service.GeminiServiceTest" time="0.005"/>
-  <testcase name="parseResponse_InvalidJson_ReturnsOriginalOrError()" classname="key.emr.ittia.service.GeminiServiceTest" time="0.01"/>
+  <testcase name="parseResponse_InvalidJson_ReturnsOriginalOrError()" classname="key.emr.ittia.service.GeminiServiceTest" time="0.006"/>
   <testcase name="parseResponse_ValidJson_ReturnsText()" classname="key.emr.ittia.service.GeminiServiceTest" time="0.002"/>
   <system-out><![CDATA[]]></system-out>
   <system-err><![CDATA[]]></system-err>

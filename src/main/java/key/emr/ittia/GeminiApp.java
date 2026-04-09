@@ -3,13 +3,17 @@ package key.emr.ittia;
 import key.emr.ittia.data.DatabaseManager;
 import key.emr.ittia.model.Model;
 import key.emr.ittia.model.Prompt;
+import key.emr.ittia.service.AiService;
 import key.emr.ittia.service.GeminiService;
+import key.emr.ittia.service.ImagePathService;
+import key.emr.ittia.service.OpenAiService;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TableColumn;
@@ -37,7 +41,9 @@ public class GeminiApp extends Application {
     private String modelName = "gemini-2.5-flash"; // Default model
 
     private final DatabaseManager dbManager = new DatabaseManager();
-    private final GeminiService geminiService = new GeminiService();
+    private final ImagePathService imagePathService = new ImagePathService();
+    private final GeminiService geminiService = new GeminiService(imagePathService);
+    private final OpenAiService openAiService = new OpenAiService(imagePathService);
 
     public static void main(String[] args) {
         launch(args);
@@ -46,7 +52,7 @@ public class GeminiApp extends Application {
     @Override
     public void start(Stage primaryStage) {
         dbManager.createTable();
-        primaryStage.setTitle("Gemini API Client");
+        primaryStage.setTitle("AI API Client");
 
         BorderPane borderPane = new BorderPane();
         borderPane.setPadding(new Insets(18));
@@ -122,6 +128,14 @@ public class GeminiApp extends Application {
         borderPane.setLeft(leftBox);
 
         // Right UI (Model List)
+        ComboBox<String> providerComboBox = new ComboBox<>();
+        providerComboBox.setItems(FXCollections.observableArrayList(
+                geminiService.getProviderName(),
+                openAiService.getProviderName()
+        ));
+        providerComboBox.setValue(geminiService.getProviderName());
+
+        Label currentProviderLabel = labeled("Current Provider: " + providerComboBox.getValue());
         Label currentModelLabel = labeled("Current Model: " + modelName);
         TableView<Model> modelTable = new TableView<>();
         TableColumn<Model, String> modelColumn = new TableColumn<>("Model");
@@ -132,41 +146,39 @@ public class GeminiApp extends Application {
         categoryColumn.setCellValueFactory(new PropertyValueFactory<>("category"));
         categoryColumn.setPrefWidth(120);
 
+        TableColumn<Model, String> providerColumn = new TableColumn<>("Provider");
+        providerColumn.setCellValueFactory(new PropertyValueFactory<>("provider"));
+        providerColumn.setPrefWidth(110);
+
         TableColumn<Model, String> descriptionColumn = new TableColumn<>("Description");
         descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionColumn.setPrefWidth(480);
+        descriptionColumn.setPrefWidth(380);
 
-        modelTable.getColumns().addAll(modelColumn, categoryColumn, descriptionColumn);
+        modelTable.getColumns().addAll(modelColumn, categoryColumn, providerColumn, descriptionColumn);
         modelTable.setPrefHeight(560);
 
-        VBox rightBox = new VBox(15, currentModelLabel, modelTable);
+        VBox rightBox = new VBox(15, labeled("Provider:"), providerComboBox, currentProviderLabel, currentModelLabel, modelTable);
         rightBox.getStyleClass().add("section-card");
         rightBox.setPrefWidth(820);
         borderPane.setRight(rightBox);
 
-        // Load models in background
-        Task<List<Model>> listModelsTask = new Task<>() {
-            @Override
-            protected List<Model> call() throws Exception {
-                return geminiService.listModels();
-            }
-        };
-
-        listModelsTask.setOnSucceeded(e -> {
-            modelTable.setItems(FXCollections.observableArrayList(listModelsTask.getValue()));
-        });
-
-        listModelsTask.setOnFailed(e -> {
-            responseArea.setText("Error loading models: " + listModelsTask.getException().getMessage());
-        });
-
-        new Thread(listModelsTask).start();
+        loadModels(providerComboBox.getValue(), modelTable, responseArea, currentProviderLabel, currentModelLabel);
 
         modelTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
             if (newSelection != null) {
                 modelName = newSelection.getName();
                 currentModelLabel.setText("Current Model: " + modelName);
+                currentProviderLabel.setText("Current Provider: " + newSelection.getProvider());
+                providerComboBox.setValue(newSelection.getProvider());
             }
+        });
+
+        providerComboBox.valueProperty().addListener((obs, oldValue, newValue) -> {
+            if (newValue == null || newValue.equals(oldValue)) {
+                return;
+            }
+            currentProviderLabel.setText("Current Provider: " + newValue);
+            loadModels(newValue, modelTable, responseArea, currentProviderLabel, currentModelLabel);
         });
 
         promptTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
@@ -259,14 +271,15 @@ public class GeminiApp extends Application {
             Task<String> apiCallTask = new Task<>() {
                 @Override
                 protected String call() throws Exception {
-                    List<Path> imagePaths = geminiService.parseImagePaths(imagePathField.getText());
-                    return geminiService.callGeminiApi(modelName, prompt, imagePaths);
+                    AiService service = getService(providerComboBox.getValue());
+                    List<Path> imagePaths = imagePathService.parseImagePaths(imagePathField.getText());
+                    return service.generateResponse(modelName, prompt, imagePaths);
                 }
             };
 
             apiCallTask.setOnSucceeded(e -> {
                 progressIndicator.setVisible(false);
-                responseArea.setText(geminiService.parseResponse(apiCallTask.getValue()));
+                responseArea.setText(apiCallTask.getValue());
             });
 
             apiCallTask.setOnFailed(e -> {
@@ -305,5 +318,47 @@ public class GeminiApp extends Application {
         Label label = new Label(text);
         label.getStyleClass().add("section-title");
         return label;
+    }
+
+    private void loadModels(
+            String provider,
+            TableView<Model> modelTable,
+            TextArea responseArea,
+            Label currentProviderLabel,
+            Label currentModelLabel
+    ) {
+        Task<List<Model>> listModelsTask = new Task<>() {
+            @Override
+            protected List<Model> call() throws Exception {
+                return getService(provider).listModels();
+            }
+        };
+
+        listModelsTask.setOnSucceeded(e -> {
+            List<Model> models = listModelsTask.getValue();
+            modelTable.setItems(FXCollections.observableArrayList(models));
+            if (!models.isEmpty()) {
+                Model firstModel = models.get(0);
+                modelTable.getSelectionModel().select(firstModel);
+                modelName = firstModel.getName();
+                currentProviderLabel.setText("Current Provider: " + firstModel.getProvider());
+                currentModelLabel.setText("Current Model: " + modelName);
+            }
+        });
+
+        listModelsTask.setOnFailed(e -> {
+            modelTable.setItems(FXCollections.observableArrayList());
+            responseArea.setText("Error loading models for " + provider + ": "
+                    + listModelsTask.getException().getMessage());
+        });
+
+        new Thread(listModelsTask).start();
+    }
+
+    private AiService getService(String provider) {
+        if (openAiService.getProviderName().equals(provider)) {
+            return openAiService;
+        }
+        return geminiService;
     }
 }

@@ -31,7 +31,14 @@ application {
 }
 
 run {
-    jvmArgs = ['--enable-native-access=javafx.graphics']
+    jvmArgs = ['--enable-native-access=javafx.graphics', '--enable-native-access=ALL-UNNAMED']
+}
+
+tasks.register('healthCheck', JavaExec) {
+    group = 'verification'
+    description = 'Checks Gemini and OpenAI API connectivity using GEMINI_API_KEY and OPENAI_API_KEY.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'key.emr.ittia.GeminiHealthCheck'
 }
 
 java {

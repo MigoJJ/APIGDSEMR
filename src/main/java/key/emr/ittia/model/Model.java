@@ -4,11 +4,13 @@ public class Model {
     private final String name;
     private final String description;
     private final String category;
+    private final String provider;
 
-    public Model(String name, String description, String category) {
+    public Model(String name, String description, String category, String provider) {
         this.name = name;
         this.description = description;
         this.category = category;
+        this.provider = provider;
     }
 
     public String getName() {
@@ -21,5 +23,9 @@ public class Model {
 
     public String getCategory() {
         return category;
+    }
+
+    public String getProvider() {
+        return provider;
     }
 }

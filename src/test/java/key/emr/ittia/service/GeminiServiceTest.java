@@ -11,6 +11,7 @@ import java.util.List;
 class GeminiServiceTest {
 
     private final GeminiService geminiService = new GeminiService();
+    private final ImagePathService imagePathService = new ImagePathService();
 
     @Test
     void parseResponse_ValidJson_ReturnsText() {
@@ -47,7 +48,7 @@ class GeminiServiceTest {
         Files.createFile(img2);
 
         String input = img1.toAbsolutePath() + "; " + img2.toAbsolutePath();
-        List<Path> paths = geminiService.parseImagePaths(input);
+        List<Path> paths = imagePathService.parseImagePaths(input);
 
         Assertions.assertEquals(2, paths.size());
         Assertions.assertTrue(paths.contains(img1));
@@ -62,7 +63,7 @@ class GeminiServiceTest {
         Files.createFile(txt1);
 
         String input = tempDir.toAbsolutePath().toString();
-        List<Path> paths = geminiService.parseImagePaths(input);
+        List<Path> paths = imagePathService.parseImagePaths(input);
 
         Assertions.assertEquals(1, paths.size());
         Assertions.assertEquals(img1, paths.get(0));
@@ -71,7 +72,7 @@ class GeminiServiceTest {
     @Test
     void parseImagePaths_NonExistentFile_ThrowsException() {
         Assertions.assertThrows(IllegalArgumentException.class, () -> {
-            geminiService.parseImagePaths("non_existent_file.png");
+            imagePathService.parseImagePaths("non_existent_file.png");
         });
     }
 }
