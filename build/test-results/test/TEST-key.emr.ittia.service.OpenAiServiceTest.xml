@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="key.emr.ittia.service.OpenAiServiceTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-04-09T03:10:46.065Z" hostname="ittia-VMware-Virtual-Platform" time="0.007">
-  <properties/>
-  <testcase name="parseResponse_WithOutputText_ReturnsText()" classname="key.emr.ittia.service.OpenAiServiceTest" time="0.002"/>
-  <testcase name="parseResponse_WithMessageContent_ReturnsText()" classname="key.emr.ittia.service.OpenAiServiceTest" time="0.001"/>
-  <system-out><![CDATA[]]></system-out>
-  <system-err><![CDATA[]]></system-err>
-</testsuite>
