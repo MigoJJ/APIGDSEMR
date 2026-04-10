@@ -77,20 +77,33 @@ public class GeminiService implements AiService {
             + modelName + ":generateContent?key=" + apiKey;
         String jsonBody = createJsonBody(text, imagePaths);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
-                .build();
+        int maxRetries = 3;
+        int retryDelayMs = 2000;
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
 
-        if (response.statusCode() != 200) {
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            int statusCode = response.statusCode();
+            if (statusCode == 200) {
+                return parseResponse(response.body());
+            }
+
             String errorMsg = extractErrorMessage(response.body());
-            throw new RuntimeException("Gemini API Error (" + response.statusCode() + "): " + errorMsg);
-        }
+            if ((statusCode == 429 || statusCode == 503) && attempt < maxRetries) {
+                Thread.sleep(retryDelayMs);
+                retryDelayMs *= 2; // Exponential backoff
+                continue;
+            }
 
-        return parseResponse(response.body());
+            throw new RuntimeException("Gemini API Error (" + statusCode + "): " + errorMsg);
+        }
+        throw new RuntimeException("Max retries exceeded for Gemini API");
     }
 
     private String requireApiKey() {
