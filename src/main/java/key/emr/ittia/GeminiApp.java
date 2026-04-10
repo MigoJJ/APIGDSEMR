@@ -38,7 +38,7 @@ import java.util.stream.Collectors;
 
 public class GeminiApp extends Application {
 
-    private String modelName = "gemini-2.5-flash"; // Default model
+    private String modelName = "gemini-1.5-flash"; // Default model
 
     private final DatabaseManager dbManager = new DatabaseManager();
     private final ImagePathService imagePathService = new ImagePathService();
@@ -338,10 +338,18 @@ public class GeminiApp extends Application {
             List<Model> models = listModelsTask.getValue();
             modelTable.setItems(FXCollections.observableArrayList(models));
             if (!models.isEmpty()) {
-                Model firstModel = models.get(0);
-                modelTable.getSelectionModel().select(firstModel);
-                modelName = firstModel.getName();
-                currentProviderLabel.setText("Current Provider: " + firstModel.getProvider());
+                // Try to find the default model or a 'flash' model first
+                Model selectedModel = models.stream()
+                        .filter(m -> m.getName().equals(modelName))
+                        .findFirst()
+                        .orElseGet(() -> models.stream()
+                                .filter(m -> m.getName().toLowerCase().contains("flash"))
+                                .findFirst()
+                                .orElse(models.get(0)));
+
+                modelTable.getSelectionModel().select(selectedModel);
+                modelName = selectedModel.getName();
+                currentProviderLabel.setText("Current Provider: " + selectedModel.getProvider());
                 currentModelLabel.setText("Current Model: " + modelName);
             }
         });
