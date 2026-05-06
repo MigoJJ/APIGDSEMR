@@ -1,37 +1,25 @@
 package key.emr.ittia.data;
 
 import key.emr.ittia.model.Prompt;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
+import java.nio.file.Path;
 import java.util.List;
 
 class DatabaseManagerTest {
 
     private DatabaseManager dbManager;
-    private final String DB_FILE = "prompts.db";
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
-        // Ensure we start with a fresh DB
-        File db = new File(DB_FILE);
-        if (db.exists()) {
-            db.delete();
-        }
-        dbManager = new DatabaseManager();
+        dbManager = new DatabaseManager("jdbc:sqlite:" + tempDir.resolve("prompts-test.db"));
         dbManager.createTable();
-    }
-
-    @AfterEach
-    void tearDown() {
-        // Clean up
-        File db = new File(DB_FILE);
-        if (db.exists()) {
-            db.delete();
-        }
     }
 
     @Test

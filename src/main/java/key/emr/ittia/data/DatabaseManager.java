@@ -13,10 +13,19 @@ import java.util.List;
 
 public class DatabaseManager {
 
-    private static final String URL = "jdbc:sqlite:prompts.db";
+    private static final String DEFAULT_URL = "jdbc:sqlite:prompts.db";
+    private final String url;
+
+    public DatabaseManager() {
+        this(DEFAULT_URL);
+    }
+
+    public DatabaseManager(String url) {
+        this.url = url;
+    }
 
     private Connection connect() throws SQLException {
-        return DriverManager.getConnection(URL);
+        return DriverManager.getConnection(url);
     }
 
     public void createTable() {
@@ -30,7 +39,7 @@ public class DatabaseManager {
              Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         } catch (SQLException e) {
-            System.err.println("Error creating table: " + e.getMessage());
+            throw new IllegalStateException("Error creating prompts table", e);
         }
     }
 
@@ -49,7 +58,7 @@ public class DatabaseManager {
                         rs.getString("category")));
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            throw new IllegalStateException("Error loading prompts", e);
         }
         return prompts;
     }
@@ -68,7 +77,7 @@ public class DatabaseManager {
                 prompt.setId(generatedKeys.getInt(1));
             }
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            throw new IllegalStateException("Error adding prompt", e);
         }
     }
 
@@ -80,7 +89,7 @@ public class DatabaseManager {
             pstmt.setInt(1, prompt.getId());
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            throw new IllegalStateException("Error deleting prompt", e);
         }
     }
 
@@ -96,7 +105,7 @@ public class DatabaseManager {
             pstmt.setInt(3, prompt.getId());
             pstmt.executeUpdate();
         } catch (SQLException e) {
-            System.out.println(e.getMessage());
+            throw new IllegalStateException("Error updating prompt", e);
         }
     }
 }

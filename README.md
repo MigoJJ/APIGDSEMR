@@ -30,3 +30,25 @@ Check only OpenAI:
 ```
 
 You can also use the `HEALTHCHECK_PROVIDER` environment variable with `gemini`, `openai`, or `all`.
+
+## Available LLM models
+
+List all configured providers' currently available LLM models:
+
+```bash
+./gradlew listModels --no-daemon
+```
+
+List only Gemini models:
+
+```bash
+./gradlew listModels -Pprovider=gemini --no-daemon
+```
+
+List only OpenAI models:
+
+```bash
+./gradlew listModels -Pprovider=openai --no-daemon
+```
+
+You can also use the `MODEL_LIST_PROVIDER` environment variable with `gemini`, `openai`, or `all`.

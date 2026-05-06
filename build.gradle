@@ -39,6 +39,18 @@ tasks.register('healthCheck', JavaExec) {
     description = 'Checks Gemini or OpenAI API connectivity. Set -Pprovider=gemini|openai|all.'
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'key.emr.ittia.GeminiHealthCheck'
+    jvmArgs = ['--enable-native-access=ALL-UNNAMED']
+    if (project.hasProperty('provider')) {
+        args project.property('provider').toString()
+    }
+}
+
+tasks.register('listModels', JavaExec) {
+    group = 'application'
+    description = 'Lists available LLM models. Set -Pprovider=gemini|openai|all.'
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'key.emr.ittia.ModelListPrinter'
+    jvmArgs = ['--enable-native-access=ALL-UNNAMED']
     if (project.hasProperty('provider')) {
         args project.property('provider').toString()
     }
@@ -54,4 +66,5 @@ java {
 
 test {
     useJUnitPlatform()
+    jvmArgs = ['--enable-native-access=ALL-UNNAMED']
 }

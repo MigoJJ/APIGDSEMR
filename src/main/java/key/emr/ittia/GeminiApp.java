@@ -17,6 +17,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TableColumn;
+import javafx.scene.control.TableRow;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -34,6 +35,7 @@ import javafx.stage.Stage;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public class GeminiApp extends Application {
@@ -44,6 +46,7 @@ public class GeminiApp extends Application {
     private final ImagePathService imagePathService = new ImagePathService();
     private final GeminiService geminiService = new GeminiService(imagePathService);
     private final OpenAiService openAiService = new OpenAiService(imagePathService);
+    private final AtomicLong modelLoadSequence = new AtomicLong();
 
     public static void main(String[] args) {
         launch(args);
@@ -55,130 +58,142 @@ public class GeminiApp extends Application {
         primaryStage.setTitle("AI API Client");
 
         BorderPane borderPane = new BorderPane();
-        borderPane.setPadding(new Insets(18));
+        borderPane.setPadding(new Insets(15));
         borderPane.setId("app-root");
 
-        // Center UI
+        // --- Center Workspace (Prompt & Response) ---
+        VBox centerBox = new VBox(12);
+        centerBox.getStyleClass().add("section-card");
+        
+        TextField imagePathField = new TextField();
+        imagePathField.setPromptText("Select image paths or folders...");
+        HBox.setHgrow(imagePathField, javafx.scene.layout.Priority.ALWAYS);
+        
+        Button browseImagesButton = new Button("Files");
+        Button browseFolderButton = new Button("Folder");
+        HBox imagePickerBox = new HBox(8, labeled("Images:"), imagePathField, browseImagesButton, browseFolderButton);
+        imagePickerBox.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
+
         TextArea promptArea = new TextArea();
         promptArea.setPromptText("Enter your prompt here...");
         promptArea.setWrapText(true);
-        promptArea.setPrefHeight(160);
-        promptArea.setPrefWidth(520);
+        VBox.setVgrow(promptArea, javafx.scene.layout.Priority.SOMETIMES);
+        promptArea.setPrefHeight(150);
 
-        Button sendButton = new Button("Send");
-        Button refreshButton = new Button("Refresh");
+        Button sendButton = new Button("Send Request");
+        sendButton.setMinWidth(120);
+        Button refreshButton = new Button("Clear");
+        Button copyButton = new Button("Copy Output");
         Button quitButton = new Button("Quit");
-        Button copyButton = new Button("Copy");
-
-        HBox buttonBox = new HBox(12, sendButton, refreshButton, copyButton, quitButton);
-        buttonBox.getStyleClass().add("button-bar");
-
+        
         ProgressIndicator progressIndicator = new ProgressIndicator();
         progressIndicator.setVisible(false);
+        progressIndicator.setPrefSize(24, 24);
+
+        HBox mainButtonBar = new HBox(12, sendButton, refreshButton, copyButton, progressIndicator, new javafx.scene.layout.Region(), quitButton);
+        HBox.setHgrow(mainButtonBar.getChildren().get(4), javafx.scene.layout.Priority.ALWAYS);
+        mainButtonBar.setAlignment(javafx.geometry.Pos.CENTER_LEFT);
 
         TextArea responseArea = new TextArea();
         responseArea.setEditable(false);
         responseArea.setWrapText(true);
-        responseArea.setPrefHeight(360);
-        responseArea.setPrefWidth(520);
+        responseArea.setPromptText("AI response will appear here...");
+        VBox.setVgrow(responseArea, javafx.scene.layout.Priority.ALWAYS);
 
-        TextField imagePathField = new TextField();
-        imagePathField.setPromptText("Image paths or folders (separate with ; )");
-        imagePathField.setPrefWidth(360);
-        Button browseImagesButton = new Button("Browse");
-        Button browseFolderButton = new Button("Folder");
-        HBox imagePickerBox = new HBox(10, imagePathField, browseImagesButton, browseFolderButton);
-        imagePickerBox.getStyleClass().add("button-bar");
+        responseArea.setOnMouseClicked(event -> {
+            if (event.getClickCount() == 2) {
+                copyButton.fire();
+            }
+        });
 
-        VBox centerBox = new VBox(15,
-                labeled("Images:"),
+        centerBox.getChildren().addAll(
                 imagePickerBox,
-                labeled("Prompt:"),
-                promptArea,
-                buttonBox,
-                progressIndicator,
-                labeled("Response:"),
-                responseArea);
-        centerBox.getStyleClass().add("section-card");
-        borderPane.setCenter(centerBox);
+                labeled("Prompt:"), promptArea,
+                mainButtonBar,
+                labeled("Response:"), responseArea
+        );
 
-        // Left UI (Pre-typed Prompts)
+        // --- Left Sidebar (Saved Prompts) ---
+        VBox leftBox = new VBox(12);
+        leftBox.getStyleClass().add("section-card");
+        
         TableView<Prompt> promptTable = new TableView<>();
-        TableColumn<Prompt, String> promptColumn = new TableColumn<>("Prompt");
+        TableColumn<Prompt, String> promptColumn = new TableColumn<>("Prompt Content");
         promptColumn.setCellValueFactory(new PropertyValueFactory<>("promptText"));
-        promptColumn.setPrefWidth(260);
         TableColumn<Prompt, String> promptCategoryColumn = new TableColumn<>("Category");
         promptCategoryColumn.setCellValueFactory(new PropertyValueFactory<>("category"));
-        promptCategoryColumn.setPrefWidth(140);
         promptTable.getColumns().addAll(promptColumn, promptCategoryColumn);
-        promptTable.setPrefWidth(420);
-        promptTable.setPrefHeight(520);
-
+        promptTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        VBox.setVgrow(promptTable, javafx.scene.layout.Priority.ALWAYS);
 
         Button addButton = new Button("Add");
-        Button deleteButton = new Button("Delete");
+        Button deleteButton = new Button("Del");
         Button editButton = new Button("Edit");
         Button findButton = new Button("Find");
-        HBox promptButtonBox = new HBox(12, addButton, deleteButton, editButton, findButton);
-        promptButtonBox.getStyleClass().add("button-bar");
+        HBox promptActions = new HBox(8, addButton, editButton, deleteButton, findButton);
+        promptActions.setAlignment(javafx.geometry.Pos.CENTER);
 
-        VBox leftBox = new VBox(15, promptTable, promptButtonBox);
-        leftBox.getStyleClass().add("section-card");
-        leftBox.setPrefWidth(450);
-        borderPane.setLeft(leftBox);
+        leftBox.getChildren().addAll(labeled("Saved Prompts"), promptTable, promptActions);
 
-        // Right UI (Model List)
+        // --- Right Sidebar (Model Settings) ---
+        VBox rightBox = new VBox(12);
+        rightBox.getStyleClass().add("section-card");
+
         ComboBox<String> providerComboBox = new ComboBox<>();
+        providerComboBox.setMaxWidth(Double.MAX_VALUE);
         providerComboBox.setItems(FXCollections.observableArrayList(
                 geminiService.getProviderName(),
                 openAiService.getProviderName()
         ));
         providerComboBox.setValue(geminiService.getProviderName());
 
-        Label currentProviderLabel = labeled("Current Provider: " + providerComboBox.getValue());
-        Label currentModelLabel = labeled("Current Model: " + modelName);
+        Label currentModelLabel = new Label("Model: " + modelName);
+        currentModelLabel.getStyleClass().add("section-title");
+        currentModelLabel.setWrapText(true);
+
         TableView<Model> modelTable = new TableView<>();
-        TableColumn<Model, String> modelColumn = new TableColumn<>("Model");
-        modelColumn.setCellValueFactory(new PropertyValueFactory<>("name"));
-        modelColumn.setPrefWidth(180);
+        TableColumn<Model, String> modelNameCol = new TableColumn<>("Model Name");
+        modelNameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
+        TableColumn<Model, String> modelCatCol = new TableColumn<>("Type");
+        modelCatCol.setCellValueFactory(new PropertyValueFactory<>("category"));
+        modelTable.getColumns().addAll(modelNameCol, modelCatCol);
+        modelTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        VBox.setVgrow(modelTable, javafx.scene.layout.Priority.ALWAYS);
 
-        TableColumn<Model, String> categoryColumn = new TableColumn<>("Category");
-        categoryColumn.setCellValueFactory(new PropertyValueFactory<>("category"));
-        categoryColumn.setPrefWidth(120);
+        Label descriptionLabel = new Label("Description:");
+        descriptionLabel.getStyleClass().add("section-title");
+        TextArea modelDescArea = new TextArea();
+        modelDescArea.setEditable(false);
+        modelDescArea.setWrapText(true);
+        modelDescArea.setPrefHeight(100);
 
-        TableColumn<Model, String> providerColumn = new TableColumn<>("Provider");
-        providerColumn.setCellValueFactory(new PropertyValueFactory<>("provider"));
-        providerColumn.setPrefWidth(110);
+        rightBox.getChildren().addAll(
+                labeled("API Provider"), providerComboBox,
+                currentModelLabel,
+                labeled("Available Models"), modelTable,
+                descriptionLabel, modelDescArea
+        );
 
-        TableColumn<Model, String> descriptionColumn = new TableColumn<>("Description");
-        descriptionColumn.setCellValueFactory(new PropertyValueFactory<>("description"));
-        descriptionColumn.setPrefWidth(380);
+        // --- Main Layout with SplitPanes ---
+        javafx.scene.control.SplitPane mainSplit = new javafx.scene.control.SplitPane();
+        mainSplit.getItems().addAll(leftBox, centerBox, rightBox);
+        mainSplit.setDividerPositions(0.25, 0.75);
+        borderPane.setCenter(mainSplit);
 
-        modelTable.getColumns().addAll(modelColumn, categoryColumn, providerColumn, descriptionColumn);
-        modelTable.setPrefHeight(560);
-
-        VBox rightBox = new VBox(15, labeled("Provider:"), providerComboBox, currentProviderLabel, currentModelLabel, modelTable);
-        rightBox.getStyleClass().add("section-card");
-        rightBox.setPrefWidth(820);
-        borderPane.setRight(rightBox);
-
-        loadModels(providerComboBox.getValue(), modelTable, responseArea, currentProviderLabel, currentModelLabel);
+        loadModels(providerComboBox.getValue(), modelTable, responseArea, null, currentModelLabel);
 
         modelTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
             if (newSelection != null) {
                 modelName = newSelection.getName();
-                currentModelLabel.setText("Current Model: " + modelName);
-                currentProviderLabel.setText("Current Provider: " + newSelection.getProvider());
-                providerComboBox.setValue(newSelection.getProvider());
+                currentModelLabel.setText("Model: " + modelName);
+                modelDescArea.setText(newSelection.getDescription());
             }
         });
 
         providerComboBox.valueProperty().addListener((obs, oldValue, newValue) -> {
-            if (newValue == null || newValue.equals(oldValue)) {
-                return;
+            if (newValue != null && !newValue.equals(oldValue)) {
+                loadModels(newValue, modelTable, responseArea, null, currentModelLabel);
             }
-            currentProviderLabel.setText("Current Provider: " + newValue);
-            loadModels(newValue, modelTable, responseArea, currentProviderLabel, currentModelLabel);
         });
 
         promptTable.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
@@ -187,35 +202,58 @@ public class GeminiApp extends Application {
             }
         });
 
-        promptTable.setItems(FXCollections.observableArrayList(dbManager.loadPrompts()));
+        try {
+            promptTable.setItems(FXCollections.observableArrayList(dbManager.loadPrompts()));
+        } catch (RuntimeException e) {
+            responseArea.setText("Error loading prompts: " + e.getMessage());
+        }
 
         addButton.setOnAction(event -> {
             PromptEditDialog dialog = new PromptEditDialog(null); // No initial prompt for adding
             dialog.getDialogPane().setPrefWidth(500); // Set preferred width
             Optional<Prompt> result = dialog.showAndWait();
             result.ifPresent(newPrompt -> {
-                dbManager.addPrompt(newPrompt);
-                promptTable.getItems().add(newPrompt);
+                try {
+                    dbManager.addPrompt(newPrompt);
+                    promptTable.getItems().add(newPrompt);
+                } catch (RuntimeException e) {
+                    responseArea.setText("Error adding prompt: " + e.getMessage());
+                }
             });
         });
 
         deleteButton.setOnAction(event -> {
             Prompt selectedPrompt = promptTable.getSelectionModel().getSelectedItem();
             if (selectedPrompt != null) {
-                dbManager.deletePrompt(selectedPrompt);
-                promptTable.getItems().remove(selectedPrompt);
+                try {
+                    dbManager.deletePrompt(selectedPrompt);
+                    promptTable.getItems().remove(selectedPrompt);
+                } catch (RuntimeException e) {
+                    responseArea.setText("Error deleting prompt: " + e.getMessage());
+                }
             }
         });
 
         editButton.setOnAction(event -> {
             Prompt selectedPrompt = promptTable.getSelectionModel().getSelectedItem();
             if (selectedPrompt != null) {
-                PromptEditDialog dialog = new PromptEditDialog(selectedPrompt); // Pass existing prompt for editing
+                Prompt promptDraft = new Prompt(
+                        selectedPrompt.getId(),
+                        selectedPrompt.getPromptText(),
+                        selectedPrompt.getCategory()
+                );
+                PromptEditDialog dialog = new PromptEditDialog(promptDraft); // Edit a draft until DB update succeeds.
                 dialog.getDialogPane().setPrefWidth(500); // Set preferred width
                 Optional<Prompt> result = dialog.showAndWait();
                 result.ifPresent(updatedPrompt -> {
-                    dbManager.updatePrompt(updatedPrompt);
-                    promptTable.refresh();
+                    try {
+                        dbManager.updatePrompt(updatedPrompt);
+                        selectedPrompt.setPromptText(updatedPrompt.getPromptText());
+                        selectedPrompt.setCategory(updatedPrompt.getCategory());
+                        promptTable.refresh();
+                    } catch (RuntimeException e) {
+                        responseArea.setText("Error updating prompt: " + e.getMessage());
+                    }
                 });
             }
         });
@@ -235,6 +273,26 @@ public class GeminiApp extends Application {
                     }
                 }
             });
+        });
+
+        promptTable.setRowFactory(tv -> {
+            TableRow<Prompt> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && (!row.isEmpty())) {
+                    promptArea.setText(row.getItem().getPromptText());
+                }
+            });
+            return row;
+        });
+
+        modelTable.setRowFactory(tv -> {
+            TableRow<Model> row = new TableRow<>();
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && (!row.isEmpty())) {
+                    promptArea.requestFocus();
+                }
+            });
+            return row;
         });
 
 
@@ -288,7 +346,9 @@ public class GeminiApp extends Application {
             });
 
             progressIndicator.setVisible(true);
-            new Thread(apiCallTask).start();
+            Thread apiThread = new Thread(apiCallTask, "api-call");
+            apiThread.setDaemon(true);
+            apiThread.start();
         });
 
         refreshButton.setOnAction(event -> {
@@ -307,7 +367,7 @@ public class GeminiApp extends Application {
             primaryStage.close();
         });
 
-        Scene scene = new Scene(borderPane, 1850, 820);
+        Scene scene = new Scene(borderPane, 1600, 900);
         scene.getStylesheets().add(
                 getClass().getResource("/key/emr/ittia/renoir.css").toExternalForm());
         primaryStage.setScene(scene);
@@ -327,6 +387,7 @@ public class GeminiApp extends Application {
             Label currentProviderLabel,
             Label currentModelLabel
     ) {
+        long loadId = modelLoadSequence.incrementAndGet();
         Task<List<Model>> listModelsTask = new Task<>() {
             @Override
             protected List<Model> call() throws Exception {
@@ -335,6 +396,9 @@ public class GeminiApp extends Application {
         };
 
         listModelsTask.setOnSucceeded(e -> {
+            if (loadId != modelLoadSequence.get()) {
+                return;
+            }
             List<Model> models = listModelsTask.getValue();
             modelTable.setItems(FXCollections.observableArrayList(models));
             if (!models.isEmpty()) {
@@ -349,18 +413,25 @@ public class GeminiApp extends Application {
 
                 modelTable.getSelectionModel().select(selectedModel);
                 modelName = selectedModel.getName();
-                currentProviderLabel.setText("Current Provider: " + selectedModel.getProvider());
+                if (currentProviderLabel != null) {
+                    currentProviderLabel.setText("Current Provider: " + selectedModel.getProvider());
+                }
                 currentModelLabel.setText("Current Model: " + modelName);
             }
         });
 
         listModelsTask.setOnFailed(e -> {
+            if (loadId != modelLoadSequence.get()) {
+                return;
+            }
             modelTable.setItems(FXCollections.observableArrayList());
             responseArea.setText("Error loading models for " + provider + ": "
                     + listModelsTask.getException().getMessage());
         });
 
-        new Thread(listModelsTask).start();
+        Thread modelThread = new Thread(listModelsTask, "model-loader-" + loadId);
+        modelThread.setDaemon(true);
+        modelThread.start();
     }
 
     private AiService getService(String provider) {

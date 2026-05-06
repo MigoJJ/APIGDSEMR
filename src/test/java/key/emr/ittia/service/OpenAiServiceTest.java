@@ -36,4 +36,23 @@ class OpenAiServiceTest {
         String result = openAiService.parseResponse(json);
         Assertions.assertEquals("Nested text", result);
     }
+
+    @Test
+    void parseModelsResponse_FiltersNonResponsesModels() {
+        String json = "{\n" +
+                "  \"data\": [\n" +
+                "    {\"id\": \"gpt-5.1\"},\n" +
+                "    {\"id\": \"text-embedding-3-small\"},\n" +
+                "    {\"id\": \"gpt-image-1\"},\n" +
+                "    {\"id\": \"tts-1\"},\n" +
+                "    {\"id\": \"o4-mini\"}\n" +
+                "  ]\n" +
+                "}";
+
+        java.util.List<key.emr.ittia.model.Model> models = openAiService.parseModelsResponse(json);
+
+        Assertions.assertEquals(2, models.size());
+        Assertions.assertEquals("gpt-5.1", models.get(0).getName());
+        Assertions.assertEquals("o4-mini", models.get(1).getName());
+    }
 }

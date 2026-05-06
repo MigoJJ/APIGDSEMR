@@ -19,6 +19,7 @@ public class GeminiService implements AiService {
 
     private static final String API_KEY_ENV = "GEMINI_API_KEY";
     private static final String PROVIDER_NAME = "Gemini";
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
     private final Gson gson = new Gson();
     private final HttpClient client;
     private final ImagePathService imagePathService;
@@ -46,6 +47,7 @@ public class GeminiService implements AiService {
         
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(REQUEST_TIMEOUT)
                 .GET()
                 .build();
 
@@ -83,6 +85,7 @@ public class GeminiService implements AiService {
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                     .build();
@@ -169,32 +172,76 @@ public class GeminiService implements AiService {
         }
     }
 
-    private List<Model> parseModelsResponse(String jsonResponse) {
+    List<Model> parseModelsResponse(String jsonResponse) {
         List<Model> models = new ArrayList<>();
         JsonObject root = gson.fromJson(jsonResponse, JsonObject.class);
         JsonArray modelsArray = root.getAsJsonArray("models");
         for (JsonElement modelElement : modelsArray) {
             JsonObject modelObject = modelElement.getAsJsonObject();
+            if (!supportsGenerateContent(modelObject)) {
+                continue;
+            }
             String name = modelObject.get("name").getAsString().replace("models/", "");
             
             String category = "LLM";
             String description = "구글의 대규모 언어 모델(LLM)입니다.";
 
-            if (name.contains("flash")) {
-                description = "빠르고 효율적인 처리를 위해 최적화된 경량 모델입니다.";
-            } else if (name.contains("pro")) {
-                description = "복잡한 추론과 다양한 작업에 적합한 고성능 모델입니다.";
-            } else if (name.contains("ultra")) {
-                description = "가장 복잡한 작업을 처리할 수 있는 최고 성능의 모델입니다.";
-            } else if (name.contains("vision")) {
-                description = "이미지 인식 및 처리에 특화된 모델입니다.";
+            if (name.contains("deep-research")) {
+                description = "연구/분석 특화: 수천 페이지 분량의 자료 분석 및 고도의 논리";
+            } else if (name.contains("robotics-er")) {
+                description = "물리적 추론/로봇 제어: 하드웨어 제어 및 물리 법칙 이해도 높음";
+            } else if (name.contains("computer-use")) {
+                description = "GUI 상호작용: 화면을 보고 마우스/키보드 직접 조작 가능";
+            } else if (name.contains("lyria")) {
+                description = "오디오/음악 생성: 전문적인 작곡 및 오디오 편집 기능";
+            } else if (name.contains("nano-banana")) {
+                description = "고효율 온디바이스 최적화: 기기 내에서 강력한 성능 발휘";
+            } else if (name.contains("gemini-3.1-flash-lite")) {
+                description = "3.0의 최적화 버전: 초경량 및 초고속 응답 속도";
+            } else if (name.contains("gemini-3.1")) {
+                description = "3.0의 최적화 버전: 고도의 추론 능력과 대규모 컨텍스트 처리 특화";
+            } else if (name.contains("gemini-3")) {
+                description = "차세대 주력 모델: 이전 세대 대비 압도적인 추론 속도 및 정확도";
+            } else if (name.contains("gemini-2.5")) {
+                description = "현시점 표준 모델: 가장 균형 잡힌 성능과 안정적인 API 지원";
+            } else if (name.contains("gemini-2.0")) {
+                description = "레거시 안정화 모델: 매우 저렴한 토큰 비용 및 빠른 처리";
+            } else if (name.contains("gemma-4-31b")) {
+                description = "고성능 지시어 이행 모델: 오픈 모델 중 최상위권의 대화 및 코딩 능력";
+                category = "Open Model";
+            } else if (name.contains("gemma-3")) {
+                description = "다양한 체급의 오픈 모델: 커스텀 튜닝 가능, 데이터 보안 유지 용이";
+                category = "Open Model";
+            } else if (name.contains("tts")) {
+                description = "음성 특화: 인간에 가까운 음성 합성";
+            } else if (name.contains("image")) {
+                description = "시각 특화: 이미지 분석 및 처리";
+            } else if (name.endsWith("-latest")) {
+                description = "최신 모델 자동 연결: 코드 수정 없이 항상 최신 최적화 모델 사용";
             } else if (name.contains("embedding")) {
                 category = "Embedding";
                 description = "텍스트를 벡터로 변환하는 임베딩 모델입니다.";
+            } else if (name.contains("flash")) {
+                description = "빠르고 효율적인 처리를 위해 최적화된 경량 모델입니다.";
+            } else if (name.contains("pro")) {
+                description = "복잡한 추론과 다양한 작업에 적합한 고성능 모델입니다.";
             }
 
             models.add(new Model(name, description, category, PROVIDER_NAME));
         }
         return models;
+    }
+
+    private boolean supportsGenerateContent(JsonObject modelObject) {
+        if (!modelObject.has("supportedGenerationMethods")) {
+            return true;
+        }
+        JsonArray methods = modelObject.getAsJsonArray("supportedGenerationMethods");
+        for (JsonElement method : methods) {
+            if ("generateContent".equals(method.getAsString())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -20,6 +20,7 @@ public class OpenAiService implements AiService {
 
     private static final String API_KEY_ENV = "OPENAI_API_KEY";
     private static final String PROVIDER_NAME = "OpenAI";
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(60);
 
     private final Gson gson = new Gson();
     private final HttpClient client;
@@ -107,6 +108,7 @@ public class OpenAiService implements AiService {
     private HttpRequest.Builder baseRequest(String url) {
         return HttpRequest.newBuilder()
                 .uri(URI.create(url))
+                .timeout(REQUEST_TIMEOUT)
                 .header("Authorization", "Bearer " + requireApiKey());
     }
 
@@ -167,13 +169,16 @@ public class OpenAiService implements AiService {
         return "Unknown error: " + jsonResponse;
     }
 
-    private List<Model> parseModelsResponse(String jsonResponse) {
+    List<Model> parseModelsResponse(String jsonResponse) {
         JsonObject root = gson.fromJson(jsonResponse, JsonObject.class);
         JsonArray data = root.getAsJsonArray("data");
         List<Model> models = new ArrayList<>();
         for (JsonElement element : data) {
             JsonObject modelObject = element.getAsJsonObject();
             String modelId = modelObject.get("id").getAsString();
+            if (!supportsResponses(modelId)) {
+                continue;
+            }
             models.add(new Model(
                     modelId,
                     describeModel(modelId),
@@ -183,6 +188,22 @@ public class OpenAiService implements AiService {
         }
         models.sort(Comparator.comparing(Model::getName));
         return models;
+    }
+
+    private boolean supportsResponses(String modelId) {
+        String normalized = modelId.toLowerCase();
+        if (normalized.contains("embedding")
+                || normalized.contains("image")
+                || normalized.contains("dall")
+                || normalized.contains("tts")
+                || normalized.contains("audio")
+                || normalized.contains("whisper")
+                || normalized.contains("moderation")) {
+            return false;
+        }
+        return normalized.startsWith("gpt-")
+                || normalized.startsWith("o")
+                || normalized.startsWith("chatgpt-");
     }
 
     private String categorizeModel(String modelId) {

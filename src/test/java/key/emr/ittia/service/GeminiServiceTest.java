@@ -41,6 +41,27 @@ class GeminiServiceTest {
     }
 
     @Test
+    void parseModelsResponse_FiltersModelsWithoutGenerateContent() {
+        String json = "{\n" +
+                "  \"models\": [\n" +
+                "    {\n" +
+                "      \"name\": \"models/gemini-2.0-flash\",\n" +
+                "      \"supportedGenerationMethods\": [\"generateContent\", \"countTokens\"]\n" +
+                "    },\n" +
+                "    {\n" +
+                "      \"name\": \"models/text-embedding-004\",\n" +
+                "      \"supportedGenerationMethods\": [\"embedContent\"]\n" +
+                "    }\n" +
+                "  ]\n" +
+                "}";
+
+        List<key.emr.ittia.model.Model> models = geminiService.parseModelsResponse(json);
+
+        Assertions.assertEquals(1, models.size());
+        Assertions.assertEquals("gemini-2.0-flash", models.get(0).getName());
+    }
+
+    @Test
     void parseImagePaths_ValidPaths_ReturnsPaths(@TempDir Path tempDir) throws Exception {
         Path img1 = tempDir.resolve("image1.png");
         Files.createFile(img1);
