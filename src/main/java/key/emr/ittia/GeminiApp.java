@@ -354,6 +354,7 @@ public class GeminiApp extends Application {
         refreshButton.setOnAction(event -> {
             promptArea.clear();
             responseArea.clear();
+            imagePathField.clear();
         });
 
         copyButton.setOnAction(event -> {
