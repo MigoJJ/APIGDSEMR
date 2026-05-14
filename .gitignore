@@ -3,6 +3,7 @@
 .gradle-home/
 .gradle-tmp/
 build/
+bin/
 
 # Java / JVM
 out/
@@ -27,3 +28,7 @@ prompts.db
 
 # Logs
 *.log
+
+# Environment variables
+.env
+.env.*
